@@ -125,7 +125,7 @@ if __name__ == '__main__':
             clf = models[model]['model']
             clf.fit(X=X_train, y=y_train)
             probs = clf.predict_proba(X=X_test)
-            preds = np.int(probs > options['cutoff'])
+            preds = clf.predict(X=X_test)
             result_container.append(
                 {
                     'iteration': i,
