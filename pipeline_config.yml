@@ -1,0 +1,22 @@
+switches:
+  split: 'bagging' # alternative is cv
+  partitions: 100
+  preprocessing: true
+  sampling:
+    method: 'under' # alternatives are [over, under, smote]
+    pos_to_neg_ratio: 1
+  feature_engineering:
+    manual: true
+    featuretools: false
+    primitives: ['percentile']
+  dimensionality_reduction: false # if true pca is performed after feature engineering phase
+  hyperparameter_tuning: false # if true then a predefined parameter grid will be run with gridsearch (resource intensive)
+
+dataset:
+  train: 'train.csv'
+  test: 'test.csv'
+  target: 'fraud'
+  cutoff: 0.5
+
+results:
+  output_path: ''
