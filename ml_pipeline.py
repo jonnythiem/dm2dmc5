@@ -1,5 +1,6 @@
 import argparse
 import logging
+import warnings
 
 import yaml
 import pandas as pd
@@ -8,16 +9,19 @@ import featuretools as ft
 from imblearn.under_sampling import RandomUnderSampler
 from imblearn.over_sampling import RandomOverSampler, SMOTE
 from sklearn.model_selection import StratifiedKFold, StratifiedShuffleSplit
+from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
 from sklearn.metrics import make_scorer, accuracy_score, precision_score, \
     recall_score, f1_score, roc_auc_score, roc_curve
 
 models = {
     'LogisticRegression': {
         'model': LogisticRegression(),
-        'params': None
+        'params': None,
+        'tree': False
     },
     'RandomForest': {
         'model': RandomForestClassifier(),
@@ -26,7 +30,13 @@ models = {
         },
         'param_grid': {
             'n_estimators': range(100, 301, 100)
-        }
+        },
+        'tree': True
+    },
+    'XGBoost': {
+        'model': XGBClassifier(),
+        'params': None,
+        'tree': True
     }
 }
 
@@ -65,6 +75,7 @@ logging.basicConfig(level=logging.INFO,
 
 if __name__ == '__main__':
 
+    warnings.filterwarnings('ignore')
     config = yaml.safe_load(open('pipeline_config.yml', 'r'))
     df = pd.read_csv('train.csv', sep='|')
     X, y = df.drop(columns='fraud'), df['fraud']
@@ -117,6 +128,11 @@ if __name__ == '__main__':
         if feature_eng['featuretools']:
             pass
 
+        if switches['dimensionality_reduction']:
+            pca = PCA()
+            X_train = pca.fit_transform(X=X_train)
+            X_test = pca.transform(X=X_test)
+
         if switches['hyperparameter_tuning']:
             pass
 
@@ -130,17 +146,20 @@ if __name__ == '__main__':
                 {
                     'iteration': i,
                     'model': model,
-                    'params': ' '.join(clf.get_params()),
+                    'params': ' '.join([f'{key}: {value}' for key, value in models[model]['params'].items()]),
                     'probabilities': probs,
                     'accuracy': accuracy_score(y_pred=preds, y_true=y_test),
                     'precision': precision_score(y_pred=preds, y_true=y_test),
                     'recall': recall_score(y_pred=preds, y_true=y_test),
                     'f1': f1_score(y_pred=preds, y_true=y_test),
                     'profit': profit_scorer(y_pred=preds, y=y_test),
-                    'auc': roc_auc_score(y_score=probs, y_true=y_test),
-                    'roc': roc_curve(y_score=probs, y_true=y_test)
+                    'auc': roc_auc_score(y_score=probs[:, 1], y_true=y_test),
+                    'roc': roc_curve(y_score=probs[:, 1], y_true=y_test)
                 }
             )
+            if models[model]['tree']:
+                result_container[-1].update({'feature_importance': clf.feature_importance_})
+
             logging.info(f'{model} completed. \n'
                          f'acc: {result_container[-1]["accuracy"]} \n'
                          f'precision: {result_container[-1]["precision"]} \n'
@@ -149,7 +168,7 @@ if __name__ == '__main__':
 
     result_df = pd.DataFrame(result_container)
     result_sum = (result_df
-        .drop(['iteration', 'roc', 'params', 'probabilties'], axis=1)
+        .drop(['iteration', 'roc', 'params', 'probabilities'], axis=1)
         .groupby('model')
         .agg(['mean', 'std', 'quantile'], q=[0, 0.25, 0.5, 0.75, 1])
     )
